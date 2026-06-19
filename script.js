@@ -6,10 +6,17 @@ searchForm.addEventListener('submit', async function (e) {
   const city = document.getElementById('q').value.trim();
   if (!city) return;
   let prevBtnText;
+  const heroIcon = document.querySelector('.hero-icon');
+  let prevHeroIconText;
   if (submitBtn) {
     prevBtnText = submitBtn.textContent;
     submitBtn.disabled = true;
     submitBtn.textContent = 'Loading...';
+  }
+  if (heroIcon) {
+    prevHeroIconText = heroIcon.textContent;
+    heroIcon.textContent = '⏳';
+    heroIcon.setAttribute('aria-busy', 'true');
   }
 
   try {
@@ -38,7 +45,13 @@ searchForm.addEventListener('submit', async function (e) {
 
     const mapped = mapWeatherCode(current.weathercode);
 
-    renderCurrentWeather(place, current, humidity, windSpeed, mapped);
+    // determine UV index (use today's value from daily if available)
+    let uvIndex = 'N/A';
+    if (daily && Array.isArray(daily.uv_index_max) && daily.uv_index_max.length) {
+      uvIndex = daily.uv_index_max[0] !== undefined ? Math.round(daily.uv_index_max[0]) : 'N/A';
+    }
+
+    renderCurrentWeather(place, current, humidity, windSpeed, mapped, uvIndex);
     renderForecast(daily, current);
     document.getElementById('q').value = '';
   } catch (err) {
@@ -49,6 +62,10 @@ searchForm.addEventListener('submit', async function (e) {
     if (submitBtn) {
       submitBtn.disabled = false;
       submitBtn.textContent = prevBtnText || 'Search';
+    }
+    if (heroIcon) {
+      heroIcon.textContent = prevHeroIconText || '☀️';
+      heroIcon.removeAttribute('aria-busy');
     }
   }
 });
@@ -97,7 +114,7 @@ async function fetchCoordinates(city) {
  * Returns the JSON response which includes `current_weather`, `daily`, and `hourly`.
  */
 async function fetchWeather(lat, lon) {
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&hourly=relativehumidity_2m,windspeed_10m&daily=temperature_2m_max,temperature_2m_min,weathercode&timezone=auto`;
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&hourly=relativehumidity_2m,windspeed_10m&daily=temperature_2m_max,temperature_2m_min,weathercode,uv_index_max&timezone=auto`;
   const res = await fetch(url);
   if (!res.ok) throw new Error('Failed to fetch weather data');
   const data = await res.json();
@@ -109,7 +126,7 @@ async function fetchWeather(lat, lon) {
  * renderCurrentWeather(place, current, humidity, windSpeed, mapped)
  * Update page elements with current weather: city name, temperature (°C), description, humidity, wind speed.
  */
-function renderCurrentWeather(place, current, humidity, windSpeed, mapped) {
+function renderCurrentWeather(place, current, humidity, windSpeed, mapped, uvIndex) {
   const displayName = `${place.name}${place.country ? ', ' + place.country : ''}`;
   document.getElementById('cityName').textContent = displayName;
   document.getElementById('temperature').textContent = Math.round(current.temperature) + '°C';
@@ -119,7 +136,7 @@ function renderCurrentWeather(place, current, humidity, windSpeed, mapped) {
   document.getElementById('windSpeed').textContent = (windSpeed !== undefined)
     ? Math.round(windSpeed * 3.6) + ' km/h'
     : 'N/A';
-  document.getElementById('uvIndex').textContent = 'N/A';
+  document.getElementById('uvIndex').textContent = (uvIndex !== undefined && uvIndex !== 'N/A') ? uvIndex : 'N/A';
 }
 
 /**
